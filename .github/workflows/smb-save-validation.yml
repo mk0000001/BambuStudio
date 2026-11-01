@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   focused-tests:
@@ -40,7 +41,45 @@ jobs:
     name: Windows x64 portable build
     if: (github.event_name == 'push' && contains(github.event.head_commit.message, '[build-app]')) || inputs.build-app
     needs: focused-tests
-    uses: ./.github/workflows/build_check_cache.yml
-    with:
-      os: windows-latest
-      build-deps-only: false
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      # Produced by upstream commit 47a13ee. Its deps tree is identical to
+      # master 79df7ae: dfcee1c78f98fa9ada89f461a2f4653ec9ad4cca.
+      - name: Reuse matching upstream Windows dependencies
+        uses: actions/download-artifact@v6
+        with:
+          artifact-ids: '11538406435'
+          repository: bambulab/BambuStudio
+          run-id: '37744640761'
+          github-token: ${{ github.token }}
+          path: upstream-deps
+      - name: Unpack dependencies
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem upstream-deps -Recurse -Filter '*.zip' | Select-Object -First 1
+          if (-not $archive) { throw 'Upstream dependency archive missing' }
+          New-Item -ItemType Directory -Path deps/build/BambuStudio_dep -Force | Out-Null
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath deps/build/BambuStudio_dep
+          if (-not (Test-Path deps/build/BambuStudio_dep/usr/local)) { throw 'Unexpected dependency layout' }
+      - uses: microsoft/setup-msbuild@v2
+      - name: Install build utilities
+        run: choco install nsis pkgconfiglite --yes --no-progress
+      - name: Configure Windows x64
+        shell: pwsh
+        run: |
+          $sdk = (Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/Include' -Directory |
+            Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          cmake -S . -B build -G 'Visual Studio 18 2026' -A X64 -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" -DCMAKE_INSTALL_PREFIX=../install-dir -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
+      - name: Build portable application
+        run: cmake --build build --target install --config Release --parallel 4
+      - name: Package portable application
+        shell: pwsh
+        run: Compress-Archive -Path install-dir -DestinationPath BambuStudio-SMB-save-test-Windows-x64.zip
+      - name: Upload portable application
+        uses: actions/upload-artifact@v6
+        with:
+          name: BambuStudio-SMB-save-test-Windows-x64
+          path: BambuStudio-SMB-save-test-Windows-x64.zip
