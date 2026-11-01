@@ -38,7 +38,6 @@
     }
   },
   "picker_capture": {
-    "duration_seconds": 45,
     "save_as_open_cancel_count": 2,
     "bambu_paired_fileio_operations": 22914,
     "main_thread_paired_operations": 11659,
@@ -46,7 +45,9 @@
     "max_paired_main_thread_ms": 12.5186,
     "paired_main_thread_above_100ms": 0,
     "reported_long_stall_captured": false,
-    "raw_capture_uploaded": false
+    "raw_capture_uploaded": false,
+    "reproduction_window_seconds": 45,
+    "event_span_including_stop_rundown_ms": 70074.659
   },
   "baseline_gui_accessibility": {
     "history_entries": 241,
@@ -113,5 +114,99 @@
       "model_xml": "pass"
     }
   ],
-  "patched_gui": "pending full application build"
+  "patched_gui": {
+    "history_entries": 241,
+    "initial_full_refresh_consumed_before_hidden_saves": true,
+    "local_save_as": [
+      {
+        "ms": 1502,
+        "accessible": true
+      }
+    ],
+    "dirty_local_ctrl_s": [
+      {
+        "ms": 641,
+        "accessible": true
+      }
+    ],
+    "mapped_save_as": [
+      {
+        "ms": 1455,
+        "accessible": true
+      }
+    ],
+    "dirty_mapped_ctrl_s": [
+      {
+        "ms": 887,
+        "accessible": true
+      }
+    ],
+    "unc_save_as": [
+      {
+        "ms": 1490,
+        "accessible": true
+      }
+    ],
+    "dirty_unc_ctrl_s": [
+      {
+        "ms": 853,
+        "accessible": true
+      }
+    ],
+    "thumbnail_counts_in_recent_order": [
+      4,
+      3,
+      2
+    ],
+    "timestamps_visible": true,
+    "missing_file_labels_visible": true,
+    "minimize_restore": "pass",
+    "unc_reopen_expected_objects": 4,
+    "online_child_browser_transition": "not exercised: online menus absent in isolated profile",
+    "archives": [
+      {
+        "file": "patched-local-A.3mf",
+        "bytes": 27865,
+        "zip_crc": "pass",
+        "model_xml": "pass",
+        "build_items": 2
+      },
+      {
+        "file": "patched-mapped-B.3mf",
+        "bytes": 28991,
+        "zip_crc": "pass",
+        "model_xml": "pass",
+        "build_items": 3
+      },
+      {
+        "file": "patched-unc-C.3mf",
+        "bytes": 29353,
+        "zip_crc": "pass",
+        "model_xml": "pass",
+        "build_items": 4
+      }
+    ]
+  },
+  "windows_application_build": {
+    "run_id": 41323002157,
+    "job_id": 124897241776,
+    "conclusion": "success",
+    "commit": "d3f4c0eb5932953b1fcdba8ea36ae9617234aa3f",
+    "version": "02.08.04.57",
+    "artifact_id": 13091314296,
+    "artifact_sha256": "e609629459ed35117cb0ee14456935e6141167bd7367c4e17a6604297395dad5",
+    "download_digest_verified": true,
+    "dll_sha256": "1dcf4f93ef5c4758094d54a9be403648d5968494b88dab6dcdc8b79c06395b17"
+  },
+  "gui_resources": {
+    "homepage3_file_count": 105,
+    "byte_identical_to_baseline": true
+  },
+  "distribution": {
+    "tag": "smb-save-test-2026-11-02",
+    "zip_sha256": "6200ba17a8d865645ccc22f6b520284f37a1d06247617e3b36361374f93f44cf",
+    "bytes": 281280069,
+    "packaged_dll_matches_tested_ci_binary": true,
+    "private_trial_profile_included": false
+  }
 }

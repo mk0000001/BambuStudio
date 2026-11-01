@@ -60,8 +60,8 @@
 - [x] Create/verify `mk0000001/BambuStudio` fork; retain upstream remote and use a dedicated feature branch, never push upstream master.
 - [x] Upload focused patch using connected GitHub tools if local Git credentials are unavailable. Read all changed file content from disk, and publish one tree/commit rather than one commit per file.
 - [x] Add a fork-only validation branch/CI that does not trigger a broad multi-OS dependency build. Compile the actual Task 1 tests with Windows MSVC and Linux GCC; include baseline-negative control where practical.
-- [ ] Enable fork Actions as needed and dispatch Windows x64 build using the observed upstream workflow. Monitor actual results, fix only task-relevant build problems, and retain honest limitations for unrelated baseline issues.
-- [ ] If a full portable artifact builds, download and inspect it before running, and use an isolated app data directory for GUI tests. Record artifact checksum/commit.
+- [x] Enable fork Actions as needed and dispatch Windows x64 build using the observed upstream workflow. Monitor actual results, fix only task-relevant build problems, and retain honest limitations for unrelated baseline issues.
+- [x] If a full portable artifact builds, download and inspect it before running, and use an isolated app data directory for GUI tests. Record artifact checksum/commit.
 
 ### Task 3: Validate SMB behavior and investigate picker independently
 
@@ -73,11 +73,12 @@
 - Consumes Task 2's built artifact if available, plus existing installed baseline apps and verified source differences.
 - Produces actual before/after timings, saved archive verification, and a separate evidence-based disposition for the picker stall.
 
-- [ ] Measure baseline and patched saves using disposable synthetic or copied projects across local/mapped/UNC destinations, long history, missing entries, repeated Save and Save As; reopen saved ZIPs and inspect integrity.
-- [ ] Verify the first return to home/recent refreshes once with expected thumbnails and timestamps. Exercise hidden parent, hidden home child, and window minimize/restore.
+- [x] Measure baseline and patched saves using disposable synthetic or copied projects across local/mapped/UNC destinations, long history, missing entries, repeated Save and Save As; reopen saved ZIPs and inspect integrity.
+- [x] Verify return to home/recent with expected thumbnails and timestamps, hidden parent and window minimize/restore. Pending consumption is tested once-only.
+- [ ] Exercise the online hidden-home-child browser route natively: the corresponding menus were absent in the isolated profile; source transitions were inspected and the gap is recorded.
 - [ ] Trace or isolate legacy-vs-modern picker behavior with matched folder/view settings and no persistent changes to network mappings or user preferences. Do not infer an API replacement is a proven fix from source differences alone.
 - [x] If the exact picker hang cannot be reproduced/captured, save a reproducible diagnostic path and explain that limitation; do not apply an unrelated wxWidgets upgrade or declare the whole symptom fixed.
-- [ ] Record tests, commands, versions, measurements and outstanding gaps. Commit only shareable findings; redact local identities/paths.
+- [x] Record tests, commands, versions, measurements and outstanding gaps. Commit only shareable findings; redact local identities/paths.
 
 ### Task 4: Whole-branch review and upstream draft PR
 

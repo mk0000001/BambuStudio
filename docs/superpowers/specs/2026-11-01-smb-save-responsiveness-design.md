@@ -2,6 +2,8 @@
 
 Status: approved by the user on 2026-11-02 (Asia/Seoul): “설계 승인, 그대로 끝까지 진행”.
 
+Post-implementation evidence and remaining validation are recorded in [the investigation report](../investigations/2026-11-02-smb-validation.md). The evidence below describes the design-stage baseline.
+
 ## Intent
 
 Reduce the temporary Windows “Not responding” state when saving 3MF projects to SMB, while preparing a focused Bambu Studio fork change that upstream maintainers can review for a future release. The user reports this for all 3MF projects, with eventual recovery, in Bambu Studio and QIDI Studio; OrcaSlicer does not show the same symptom in their normal use.
