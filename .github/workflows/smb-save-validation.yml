@@ -72,7 +72,7 @@ jobs:
         run: |
           $sdk = (Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/Include' -Directory |
             Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          cmake -S . -B build -G 'Visual Studio 18 2026' -A X64 -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" -DCMAKE_INSTALL_PREFIX=../install-dir -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
+          cmake -S . -B build -G 'Visual Studio 18 2026' -A X64 -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" "-DCMAKE_INSTALL_PREFIX=$pwd/install-dir" -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
       - name: Build portable application
         run: cmake --build build --target install --config Release --parallel 4
       - name: Package portable application
