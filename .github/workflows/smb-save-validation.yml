@@ -1,0 +1,40 @@
+name: SMB save validation
+
+on:
+  push:
+    branches: [ci/smb-save-validation]
+  workflow_dispatch:
+    inputs:
+      build-app:
+        description: Build the Windows x64 portable application
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  focused-tests:
+    name: Recent-project refresh tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure the focused C++17 tests
+        run: cmake -S .github/smb-validation -B build-smb-tests
+      - name: Build
+        run: cmake --build build-smb-tests --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build-smb-tests -C Release --output-on-failure
+
+  windows-app:
+    name: Windows x64 portable build
+    if: github.event_name == 'push' || inputs.build-app
+    needs: focused-tests
+    uses: ./.github/workflows/build_check_cache.yml
+    with:
+      os: windows-latest
+      build-deps-only: false
