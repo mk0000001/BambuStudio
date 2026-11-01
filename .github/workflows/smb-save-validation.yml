@@ -29,10 +29,16 @@ jobs:
         run: cmake --build build-smb-tests --config Release --parallel 2
       - name: Test
         run: ctest --test-dir build-smb-tests -C Release --output-on-failure
+      - name: Upload Windows diagnostic executables
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: smb-refresh-windows-diagnostics
+          path: build-smb-tests/Release/*.exe
 
   windows-app:
     name: Windows x64 portable build
-    if: github.event_name == 'push' || inputs.build-app
+    if: (github.event_name == 'push' && contains(github.event.head_commit.message, '[build-app]')) || inputs.build-app
     needs: focused-tests
     uses: ./.github/workflows/build_check_cache.yml
     with:
