@@ -93,4 +93,4 @@
 - [x] Dispatch one fresh code reviewer for the whole focused branch, with this plan/spec and execution ledger; assess integration and lifetime concerns deliberately.
 - [x] Resolve important findings, run the covering tests RED→GREEN and rerun the focused suite. Keep build/GUI failures separate from policy test success.
 - [x] Open an upstream draft PR describing only the focused change and actual verification. Include measured component latency and unresolved picker/full-app limitations; do not claim next-release acceptance.
-- [ ] Attach the PR to this chat and deliver fork/branch/PR and actual artifact links, along with any required next action if an external blocker remains.
+- [x] Attach the PR to this chat and deliver fork/branch/PR and actual artifact links, along with any required next action if an external blocker remains.
