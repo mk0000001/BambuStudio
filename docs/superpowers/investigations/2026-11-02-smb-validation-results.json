@@ -1,0 +1,117 @@
+{
+  "date_local": "2026-11-02",
+  "timezone": "Asia/Seoul",
+  "scope": "Component metadata benchmarks, one warmed picker FileIO capture, and explicitly bounded GUI accessibility observations. Not a complete resolution of every reported stall.",
+  "components": {
+    "BambuStudio": {
+      "scope": "metadata component benchmark, not a GUI save",
+      "history_entries": 241,
+      "baseline_queries": 482,
+      "baseline_ms": 4353.79,
+      "patched_hidden_queries": 0,
+      "patched_hidden_ms": 0,
+      "return_home_queries": 241,
+      "return_home_ms": 2141.6,
+      "app": "BambuStudio"
+    },
+    "QIDIStudio": {
+      "scope": "metadata component benchmark, not a GUI save",
+      "history_entries": 124,
+      "baseline_queries": 248,
+      "baseline_ms": 2409.98,
+      "patched_hidden_queries": 0,
+      "patched_hidden_ms": 0.0001,
+      "return_home_queries": 124,
+      "return_home_ms": 1273.83,
+      "app": "QIDIStudio"
+    },
+    "OrcaSlicer": {
+      "scope": "metadata component benchmark, not a GUI save",
+      "history_entries": 18,
+      "baseline_queries": 36,
+      "baseline_ms": 370.552,
+      "patched_hidden_queries": 0,
+      "patched_hidden_ms": 0,
+      "return_home_queries": 18,
+      "return_home_ms": 166.171,
+      "app": "OrcaSlicer"
+    }
+  },
+  "picker_capture": {
+    "duration_seconds": 45,
+    "save_as_open_cancel_count": 2,
+    "bambu_paired_fileio_operations": 22914,
+    "main_thread_paired_operations": 11659,
+    "main_thread_name": "bambustu_main",
+    "max_paired_main_thread_ms": 12.5186,
+    "paired_main_thread_above_100ms": 0,
+    "reported_long_stall_captured": false,
+    "raw_capture_uploaded": false
+  },
+  "baseline_gui_accessibility": {
+    "history_entries": 241,
+    "initial_missing_entries": 15,
+    "measurement_limit": "Input and automation overhead included; observes AX availability, not exact save duration or hung-window status.",
+    "dirty_local_save": [
+      {
+        "ms": 3188,
+        "accessible": false
+      },
+      {
+        "ms": 5273,
+        "accessible": true
+      }
+    ],
+    "mapped_save_as": [
+      {
+        "ms": 3167,
+        "accessible": false
+      },
+      {
+        "ms": 6255,
+        "accessible": false
+      },
+      {
+        "ms": 6383,
+        "accessible": true
+      }
+    ],
+    "unc_save_as": [
+      {
+        "ms": 3154,
+        "accessible": false
+      },
+      {
+        "ms": 6029,
+        "accessible": true
+      }
+    ]
+  },
+  "baseline_archives": [
+    {
+      "file": "baseline-local.3mf",
+      "bytes": 29031,
+      "zip_crc": "pass",
+      "model_xml": "pass"
+    },
+    {
+      "file": "baseline-mapped.3mf",
+      "bytes": 25852,
+      "zip_crc": "pass",
+      "model_xml": "pass"
+    },
+    {
+      "file": "baseline-long-mapped.3mf",
+      "bytes": 29031,
+      "zip_crc": "pass",
+      "model_xml": "pass"
+    },
+    {
+      "file": "baseline-long-unc.3mf",
+      "bytes": 29031,
+      "zip_crc": "pass",
+      "model_xml": "pass"
+    }
+  ],
+  "patched_gui": "pending full application build"
+}

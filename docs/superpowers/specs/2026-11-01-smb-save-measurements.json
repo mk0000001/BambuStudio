@@ -1,0 +1,27 @@
+{
+  "date_local": "2026-11-01",
+  "timezone": "Asia/Seoul",
+  "scope": "Read-only API-level recent-history metadata scan; not end-to-end GUI save timing",
+  "windows_api_sequence": ["CreateFileW", "GetFileTime", "CloseHandle"],
+  "desired_access": "FILE_READ_ATTRIBUTES | FILE_READ_EA",
+  "share_mode": "FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE",
+  "creation_disposition": "OPEN_EXISTING",
+  "flags": "FILE_FLAG_BACKUP_SEMANTICS",
+  "sequential_scan": [
+    {"app": "BambuStudio", "installed_version": "02.08.02.61", "history_entries": 241, "unavailable_entries": 15, "elapsed_ms": 2033.8},
+    {"app": "QIDIStudio", "installed_version": "02.07.02.73", "history_entries": 124, "unavailable_entries": 1, "elapsed_ms": 1127.5},
+    {"app": "OrcaSlicer", "version_from_config": "2.4.2", "history_entries": 18, "unavailable_entries": 1, "elapsed_ms": 163.0}
+  ],
+  "control_get_file_attributes_ex_w": [
+    {"app": "BambuStudio", "elapsed_ms": 71.1},
+    {"app": "QIDIStudio", "elapsed_ms": 33.1},
+    {"app": "OrcaSlicer", "elapsed_ms": 3.5}
+  ],
+  "limitations": [
+    "Single measurements with warm/unspecified OS and SMB cache state",
+    "Public Win32 API sequence emulates the relevant Boost 1.84.0 implementation; not an instrumented application build",
+    "No stack trace captured during the reported application hang",
+    "File picker freezes are separately reported by the user and not explained by these measurements",
+    "Private file paths and configuration contents omitted"
+  ]
+}
