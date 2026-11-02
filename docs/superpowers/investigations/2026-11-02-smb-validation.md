@@ -1,6 +1,6 @@
 # SMB save investigation and validation
 
-Status: active investigation, 2026-11-02 (Asia/Seoul). The focused upstream change is a draft: [BambuStudio PR #12850](https://github.com/bambulab/BambuStudio/pull/12850).
+Status: active investigation, 2026-11-02 (Asia/Seoul). The focused upstream change is ready for maintainer review: [BambuStudio PR #12850](https://github.com/bambulab/BambuStudio/pull/12850).
 
 ## Established latency contribution
 
@@ -90,7 +90,7 @@ An online child-browser transition was not exercised because MakerLab/MakerWorld
 
 - Obtain a trace during an actual long picker stall before proposing a picker implementation change.
 - Exercise the online child-browser visibility route in an environment where that UI is available, and expand platform coverage as needed.
-- PR #12850 remains a draft with the executed Windows evidence and these limits. Upstream acceptance and a future release remain maintainer decisions.
+- On 2026-11-02, PR #12850 was marked ready for review at the user's request. Its description asks maintainers to consider the focused recent-list improvement for an upcoming Public Beta and approve the pending upstream workflow. The separate picker stall and the validation limits above remain explicit. Upstream acceptance and a future release remain maintainer decisions.
 
 No claim is made that the entire reported symptom has been fixed.
 

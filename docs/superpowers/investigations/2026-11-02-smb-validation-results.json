@@ -213,5 +213,14 @@
     "release_id": 430705722,
     "tag_commit": "d3f4c0eb5932953b1fcdba8ea36ae9617234aa3f",
     "github_asset_digest_matches_local": true
+  },
+  "upstream_pr": {
+    "number": 12850,
+    "state": "open",
+    "draft": false,
+    "head": "a81a1426225987e2ad735ef1618923c5c295380c",
+    "ready_for_review_date_local": "2026-11-02",
+    "upcoming_public_beta_consideration_requested": true,
+    "upstream_workflow_awaiting_maintainer_approval": true
   }
 }

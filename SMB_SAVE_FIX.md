@@ -2,7 +2,7 @@
 
 3MF 저장 시 숨겨진 홈 화면의 최근 프로젝트 목록 전체를 동기적으로 조회하는 비용을 줄이는 실험용 수정입니다. 긴 SMB 최근 기록이 있는 환경에서 저장 후 지연에 기여하는 경로를 확인했습니다. 저장창 자체의 간헐적인 멈춤은 별도로 조사하고 있습니다.
 
-- [상류 초안 PR #12850](https://github.com/bambulab/BambuStudio/pull/12850)
+- [상류 검토 요청 PR #12850](https://github.com/bambulab/BambuStudio/pull/12850)
 - [Windows 시험용 빌드](https://github.com/mk0000001/BambuStudio/releases/tag/smb-save-test-2026-11-02)
 - [상류 제출용 코드 브랜치](https://github.com/mk0000001/BambuStudio/tree/fix/smb-save-recent-refresh)
 - [Windows 전체 빌드와 회귀 테스트](https://github.com/mk0000001/BambuStudio/actions/runs/41323002157)
