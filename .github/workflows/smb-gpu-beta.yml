@@ -1,7 +1,7 @@
 name: Bambu 2.9.1 supported v143 SMB GPU beta validation
 on:
   push:
-    branches: [ci/smb-gpu-beta-2.9.1-v143]
+    branches: [ci/smb-gpu-cpu-beta-2.9.1-20261106]
   workflow_dispatch:
 permissions:
   contents: read
@@ -213,6 +213,24 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           [xml]$report = Get-Content focused-gpu-tests.xml -Raw
           if (@($report.SelectNodes('//testcase')).Count -lt 20) { throw 'Focused geometry/preflight cases did not execute' }
+      - name: Run focused native filament capacity context cases
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd/install-beta;$env:PATH"
+          $test = @(Get-ChildItem build-gpu/tests/filament_group -Recurse -File -Filter filament_group_tests.exe)
+          if ($test.Count -ne 1) { throw 'Expected one actual maintained filament test executable' }
+          & $test[0].FullName '[capacity_fallback]' -r junit -o "$pwd/focused-filament-context.xml" *> focused-filament-context.log
+          $result = $LASTEXITCODE
+          Get-Content focused-filament-context.log -Tail 60
+          if ($result) { exit $result }
+          [xml]$report = Get-Content focused-filament-context.xml -Raw
+          if (@($report.SelectNodes('//testcase')).Count -ne 4) { throw 'Expected exactly four registered capacity context cases' }
+          $assertions = 0
+          foreach ($suite in @($report.SelectNodes('//testsuite'))) {
+            $assertions += [int]$suite.GetAttribute('tests')
+            if ([int]$suite.GetAttribute('failures') -ne 0 -or [int]$suite.GetAttribute('errors') -ne 0) { throw 'Focused capacity context assertions failed' }
+          }
+          if ($assertions -ne 15) { throw 'Expected fifteen actual capacity context assertions' }
       - name: Run project tests in CPU mode
         shell: pwsh
         run: |
@@ -238,6 +256,8 @@ jobs:
           path: |
             tests.xml
             focused-gpu-tests.xml
+            focused-filament-context.xml
+            focused-filament-context.log
             maintained-test-manifest.json
             app-build.log
             app-install.log
