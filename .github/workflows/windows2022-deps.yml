@@ -1,0 +1,129 @@
+name: Bambu 2.9.1 source matched VS2022 dependencies
+on:
+  push:
+    branches: [ci/windows2022-deps-2.9.1]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependencies:
+    if: github.repository == 'mk0000001/BambuStudio'
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '4'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Record exact tracked source before generating dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory recovery-evidence -Force | Out-Null
+          git merge-base --is-ancestor c43bc49004a6ce527887056bfb4b31c0b6494dc8 HEAD
+          if ($LASTEXITCODE) { throw 'Expected c43 source ancestry' }
+          $tree = (git rev-parse HEAD:deps).Trim()
+          if ($tree -ne 'dfcee1c78f98fa9ada89f461a2f4653ec9ad4cca') { throw 'Dependency tree mismatch' }
+          git ls-tree -r HEAD deps | Set-Content recovery-evidence/dependency-manifest.txt
+          if ($LASTEXITCODE) { throw 'Cannot record tracked dependency manifest' }
+          @("source=$((git rev-parse HEAD).Trim())", 'source_floor=c43bc49004a6ce527887056bfb4b31c0b6494dc8', "deps_tree=$tree", 'generator=Visual Studio 17 2022', 'platform=x64', 'toolset=v143', 'configuration=Release', 'DEP_DEBUG=OFF', "run_id=$env:GITHUB_RUN_ID", "run_attempt=$env:GITHUB_RUN_ATTEMPT") | Set-Content recovery-evidence/Bambu-dependency-source.txt
+      - uses: ssrobins/install-cmake@v1
+        with:
+          version: 3.31.6
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
+      - name: Install dependency build utilities on runner
+        shell: pwsh
+        run: |
+          choco install nsis pkgconfiglite strawberryperl --yes --no-progress
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          'C:\Strawberry\perl\bin' | Add-Content $env:GITHUB_PATH
+          'C:\Strawberry\c\bin' | Add-Content $env:GITHUB_PATH
+      - name: Select and record VS2022 compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = (& $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+          if (-not $vs) { throw 'VS2022 C++ tools missing' }
+          $devcmd = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          $vars = & cmd /d /s /c "`"`"$devcmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set`""
+          if ($LASTEXITCODE) { throw 'VS2022 developer environment failed' }
+          foreach ($line in $vars) {
+            if ($line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process') }
+          }
+          if ($env:VSCMD_VER -notmatch '^17\.' -or $env:VCToolsVersion -notmatch '^14\.[34]') { throw 'Expected VS17 v143 environment' }
+          foreach ($name in @('PATH','INCLUDE','LIB','LIBPATH','VSINSTALLDIR','VCINSTALLDIR','VCToolsInstallDir','VCToolsVersion','VSCMD_VER','WindowsSdkDir','WindowsSDKVersion')) {
+            $value = [Environment]::GetEnvironmentVariable($name, 'Process')
+            if ($value) { "$name=$value" | Add-Content $env:GITHUB_ENV }
+          }
+          "vs_installation=$vs" | Add-Content recovery-evidence/Bambu-dependency-source.txt
+          "vc_tools_version=$env:VCToolsVersion" | Add-Content recovery-evidence/Bambu-dependency-source.txt
+          $compiler = (Get-Command cl.exe).Source
+          if ($compiler -notlike "$vs*") { throw 'cl.exe is not from selected VS2022' }
+          "compiler=$compiler" | Add-Content recovery-evidence/Bambu-dependency-source.txt
+          & cl.exe /Bv 2>&1 | Out-File recovery-evidence/compiler-version.txt
+          # cl /Bv without an input intentionally diagnoses missing source; the version output is evidence.
+          $global:LASTEXITCODE = 0
+          Get-Content recovery-evidence/compiler-version.txt
+          cmake --version | Tee-Object recovery-evidence/cmake-version.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ((cmake --version | Select-Object -First 1) -ne 'cmake version 3.31.6') { throw 'Unexpected CMake version' }
+          msbuild -version | Tee-Object recovery-evidence/msbuild-version.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Configure exact dependencies with VS2022 v143
+        shell: pwsh
+        run: |
+          cmake -S deps -B build-deps -G 'Visual Studio 17 2022' -A x64 -T v143 "-DDESTDIR=$pwd/deps/build/BambuStudio_dep" -DCMAKE_BUILD_TYPE=Release -DDEP_DEBUG=OFF *> recovery-evidence/configure.log
+          $code = $LASTEXITCODE
+          Get-Content recovery-evidence/configure.log -Tail 100
+          if ($code) { exit $code }
+          Copy-Item build-deps/CMakeCache.txt recovery-evidence/CMakeCache.txt
+          Copy-Item build-deps/CMakeFiles/3.31.6/CMakeCXXCompiler.cmake recovery-evidence/CMakeCXXCompiler.cmake
+          $metadata = Get-Content recovery-evidence/CMakeCXXCompiler.cmake -Raw
+          if ($metadata -notmatch 'CMAKE_CXX_COMPILER_VERSION "19\.[34]' -or $metadata -notmatch 'MSVC') { throw 'Configured compiler is not VS2022 v143' }
+      - name: Build all dependencies in Release
+        shell: pwsh
+        run: |
+          cmake --build build-deps --config Release --parallel 4 *> recovery-evidence/build.log
+          $code = $LASTEXITCODE
+          Get-Content recovery-evidence/build.log -Tail 120
+          if ($code) { exit $code }
+      - name: Package completed prefix with exact provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git diff --exit-code -- deps
+          if ($LASTEXITCODE) { throw 'Tracked dependency source changed during build' }
+          if ((git rev-parse HEAD:deps).Trim() -ne 'dfcee1c78f98fa9ada89f461a2f4653ec9ad4cca') { throw 'Dependency tree changed' }
+          $prefix = 'deps/build/BambuStudio_dep/usr/local'
+          foreach ($part in @('include','lib','bin')) { if (-not (Test-Path "$prefix/$part" -PathType Container)) { throw "Missing prefix $part" } }
+          New-Item -ItemType Directory completed-deps -Force | Out-Null
+          Compress-Archive -Path 'deps/build/BambuStudio_dep/*' -DestinationPath completed-deps/Bambu-2.9.1-Windows2022-v143-deps.zip -CompressionLevel Optimal
+          $digest = (Get-FileHash completed-deps/Bambu-2.9.1-Windows2022-v143-deps.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  Bambu-2.9.1-Windows2022-v143-deps.zip" | Set-Content completed-deps/SHA256SUMS.txt
+          "archive_sha256=$digest" | Add-Content recovery-evidence/Bambu-dependency-source.txt
+          Copy-Item recovery-evidence/Bambu-dependency-source.txt,recovery-evidence/dependency-manifest.txt,recovery-evidence/compiler-version.txt,recovery-evidence/cmake-version.txt,recovery-evidence/msbuild-version.txt,recovery-evidence/CMakeCache.txt,recovery-evidence/CMakeCXXCompiler.cmake completed-deps/
+          Get-Content completed-deps/Bambu-dependency-source.txt
+      - name: Upload completed dependencies before any app build
+        uses: actions/upload-artifact@v6
+        with:
+          name: Bambu-2.9.1-Windows2022-v143-deps
+          path: completed-deps/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload full compiler and build evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Bambu-Windows2022-dependency-evidence
+          path: recovery-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
