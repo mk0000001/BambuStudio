@@ -114,21 +114,58 @@ jobs:
         shell: pwsh
         run: |
           $sdk = (Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/Include' -Directory | Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          New-Item -ItemType Directory build-gpu/.cmake/api/v1/query -Force | Out-Null
+          New-Item -ItemType File build-gpu/.cmake/api/v1/query/codemodel-v2 -Force | Out-Null
           cmake -S . -B build-gpu -G 'Visual Studio 17 2022' -A x64 -T "v143,cuda=$env:CUDA_PATH" -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 -DSLIC3R_BUILD_TESTS=ON -DSLIC3R_ENABLE_CUDA_SLICER=ON -DSLIC3R_ENABLE_VULKAN_SLICER=ON -DSLIC3R_GPU_SELFTEST=ON -DCMAKE_CUDA_ARCHITECTURES=61 "-DSLIC3R_VULKAN_RUNTIME_DLL=$env:VULKAN_RUNTIME_DIR/x64/vulkan-1.dll" "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" "-DCMAKE_INSTALL_PREFIX=$pwd/install-beta" -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Build full app and tests
-        run: cmake --build build-gpu --target install --config Release --parallel 2
-      - name: Build focused native geometry contracts
-        run: cmake --build build-gpu --target gpu_geometry_tests gpu_rectilinear_candidates_tests gpu_tree_candidates_tests --config Release --parallel 2
-      - name: Package exact-source app and runtime notices
+      - name: Verify maintained target manifest before compilation
+        shell: pwsh
+        run: |
+          $reply = 'build-gpu/.cmake/api/v1/reply'
+          $index = @(Get-ChildItem $reply -Filter 'index-*.json')
+          if ($index.Count -ne 1) { throw 'Expected one fresh CMake file-API index' }
+          $modelName = (Get-Content $index[0].FullName -Raw | ConvertFrom-Json).reply.'codemodel-v2'.jsonFile
+          $model = Get-Content (Join-Path $reply $modelName) -Raw | ConvertFrom-Json
+          $release = @($model.configurations | Where-Object name -EQ 'Release')
+          if ($release.Count -ne 1) { throw 'Missing Release target configuration' }
+          $required = @('gpu_geometry_tests','gpu_rectilinear_candidates_tests','gpu_tree_candidates_tests')
+          foreach ($name in $required) {
+            $target = @($release[0].targets | Where-Object name -EQ $name)
+            if ($target.Count -ne 1 -or -not (Test-Path "build-gpu/tests/gpu_geometry/$name.vcxproj")) { throw "Maintained IDE target missing: $name" }
+          }
+          $checkLinks = @('libslic3r_utils_tests','filament_group_tests','nozzle_inventory_tests','periodic_modifier_tests','support_material_on_wipe_tower_tests','gpu_geometry_tests')
+          foreach ($name in $checkLinks) {
+            $entry = @($release[0].targets | Where-Object name -EQ $name)
+            if ($entry.Count -ne 1) { throw "Missing maintained link target: $name" }
+            $target = Get-Content (Join-Path $reply $entry[0].jsonFile) -Raw | ConvertFrom-Json
+            $fragments = @($target.link.commandFragments | ForEach-Object fragment) -join ' '
+            if ($fragments -match '/FORCE:UNRESOLVED' -or $fragments -notmatch 'bcrypt' -or $fragments -notmatch 'libslic3r_gui') { throw "Invalid real dependency link boundary: $name" }
+          }
+          $selection = '^(libnest2d_tests|libslic3r_tests|fff_print_tests|sla_print_tests|cpp17_tests)$'
+          $listing = ctest --test-dir build-gpu -C Release --exclude-regex $selection --show-only=json-v1 | ConvertFrom-Json
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $expected = @('slic3rutils_tests','support_material_on_wipe_tower_tests','periodic_modifier_tests','fila_manager_tests','filament_group_tests','nozzle_inventory_tests','libslic3r_utils_tests','gpu_rectilinear_candidates_tests','gpu_tree_candidates_tests','gpu_geometry_tests') | Sort-Object
+          $actual = @($listing.tests | ForEach-Object name | Sort-Object)
+          if (($actual -join ',') -ne ($expected -join ',')) { throw 'Maintained default test manifest changed' }
+          $listing | ConvertTo-Json -Depth 30 | Set-Content maintained-test-manifest.json -Encoding utf8
+      - name: Build full app selftest and runtime-copy target then install
+        shell: pwsh
+        run: |
+          $log = Join-Path $pwd 'app-build.log'
+          cmake --build build-gpu --target BambuStudio_app_gui BambuStudioDllsCopy slic3r-gpu-compute-selftest --config Release --parallel 2 -- /consoleloggerparameters:ErrorsOnly /filelogger "/fileloggerparameters:logfile=$log;verbosity=minimal"
+          $result = $LASTEXITCODE
+          if ($result) { exit $result }
+          cmake --install build-gpu --config Release *> app-install.log
+          $result = $LASTEXITCODE
+          Get-Content app-install.log -Tail 60
+          if ($result) { exit $result }
+      - name: Package unverified app candidate before maintained test compilation
+        id: candidate
         shell: pwsh
         run: |
           if (-not (Test-Path install-beta/cudart64_12.dll) -or -not (Test-Path install-beta/vulkan-1.dll)) { throw 'Portable runtime missing' }
           if (@(Get-ChildItem install-beta/resources/vulkan -Filter '*.spv').Count -ne 6) { throw 'Shader packaging incomplete' }
           New-Item -ItemType Directory install-beta/diagnostics,install-beta/licenses -Force | Out-Null
-          $test = @(Get-ChildItem build-gpu -Recurse -Filter gpu_geometry_tests.exe)
-          if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
-          Copy-Item $test[0].FullName install-beta/diagnostics
           if (@(git status --porcelain --untracked-files=no).Count) { throw 'Tracked source changed during the build' }
           Copy-Item LICENSE install-beta/LICENSE-AGPL-3.0.txt
           $notices = @(Get-ChildItem "$env:CUDA_PATH" -File | Where-Object Name -Match 'LICENSE|EULA')
@@ -145,15 +182,37 @@ jobs:
             $lines = @('@echo off', "set SLIC3R_GPU_BACKEND=$mode", 'if not exist "%~dp0beta-profile" mkdir "%~dp0beta-profile"', 'if errorlevel 1 exit /b 1', 'start "" "%~dp0bambu-studio.exe" --datadir "%~dp0beta-profile"')
             $lines | Set-Content "install-beta/Start-$mode.cmd" -Encoding ascii
           }
-          Compress-Archive install-beta BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip
-          $hash = (Get-FileHash BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip" | Set-Content package-sha256.txt -Encoding ascii
+          'UNVERIFIED_COMPILED_CANDIDATE; maintained test targets have not yet compiled or run; hardware/output-equivalence/release validation pending.' | Set-Content install-beta/VALIDATION-STATUS.txt -Encoding ascii
+          Compress-Archive install-beta UNVERIFIED-BambuStudio-2.9.1-SMB-GPU-v143-candidate.zip
+          $hash = (Get-FileHash UNVERIFIED-BambuStudio-2.9.1-SMB-GPU-v143-candidate.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  UNVERIFIED-BambuStudio-2.9.1-SMB-GPU-v143-candidate.zip" | Set-Content candidate-sha256.txt -Encoding ascii
       - name: Preserve unverified candidate before project tests
         uses: actions/upload-artifact@v6
         with:
           name: UNVERIFIED-BambuStudio-2.9.1-SMB-GPU-v143-candidate
-          path: BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip
+          path: |
+            UNVERIFIED-BambuStudio-2.9.1-SMB-GPU-v143-candidate.zip
+            candidate-sha256.txt
           if-no-files-found: error
+      - name: Compile all maintained default tests including GPU geometry contracts
+        shell: pwsh
+        run: |
+          $log = Join-Path $pwd 'maintained-build.log'
+          cmake --build build-gpu --target ALL_BUILD --config Release --parallel 2 -- /consoleloggerparameters:ErrorsOnly /filelogger "/fileloggerparameters:logfile=$log;verbosity=minimal"
+          $result = $LASTEXITCODE
+          if ($result) { exit $result }
+          $test = @(Get-ChildItem build-gpu -Recurse -Filter gpu_geometry_tests.exe)
+          if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
+          Copy-Item $test[0].FullName install-beta/diagnostics
+      - name: Run focused exact preflight and Fill contracts in CPU mode
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd/install-beta;$env:PATH"
+          $env:SLIC3R_GPU_TEST_RESOURCES = "$pwd/install-beta/resources"
+          & install-beta/diagnostics/gpu_geometry_tests.exe '[Gpu],[GpuBatchPreflight]' -r junit -o "$pwd/focused-gpu-tests.xml"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          [xml]$report = Get-Content focused-gpu-tests.xml -Raw
+          if (@($report.SelectNodes('//testcase')).Count -lt 20) { throw 'Focused geometry/preflight cases did not execute' }
       - name: Run project tests in CPU mode
         shell: pwsh
         run: |
@@ -165,12 +224,25 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & install-beta/slic3r-gpu-compute-selftest.exe "$pwd/install-beta/resources/vulkan" cpu
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package only after all maintained native gates pass
+        shell: pwsh
+        run: |
+          'CI_STANDALONE_AND_ALL_TEN_MAINTAINED_NATIVE_TESTS_PASSED; legacy suites remain excluded; physical GPU, full-app output equivalence and release validation pending.' | Set-Content install-beta/VALIDATION-STATUS.txt -Encoding ascii
+          Compress-Archive install-beta BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip
+          $hash = (Get-FileHash BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip" | Set-Content package-sha256.txt -Encoding ascii
       - if: always()
         uses: actions/upload-artifact@v6
         with:
           name: bambu-gpu-beta-evidence
           path: |
             tests.xml
+            focused-gpu-tests.xml
+            maintained-test-manifest.json
+            app-build.log
+            app-install.log
+            maintained-build.log
+            candidate-sha256.txt
             dependency-archive-sha256.txt
             dependency-source-used.txt
             dependency-compiler-used.cmake
