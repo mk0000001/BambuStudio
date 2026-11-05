@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   SLIC3R_GPU_BACKEND: cpu
 jobs:
@@ -96,12 +99,16 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Build full app and tests
         run: cmake --build build-gpu --target install --config Release --parallel 2
+      - name: Build focused native geometry contracts
+        run: cmake --build build-gpu --target gpu_geometry_tests gpu_rectilinear_candidates_tests gpu_tree_candidates_tests --config Release --parallel 2
       - name: Run project tests in CPU mode
         shell: pwsh
         run: |
           $env:PATH = "$pwd/install-beta;$env:PATH"
           $env:SLIC3R_GPU_TEST_RESOURCES = "$pwd/install-beta/resources"
-          ctest --test-dir build-gpu -C Release --output-on-failure --parallel 2 --output-junit "$pwd/tests.xml"
+          # Upstream deliberately excludes these obsolete suites from ALL.
+          # Run maintained defaults plus the explicitly built GPU geometry suite.
+          ctest --test-dir build-gpu -C Release --output-on-failure --parallel 2 --exclude-regex '^(libnest2d_tests|libslic3r_tests|fff_print_tests|sla_print_tests|cpp17_tests)$' --output-junit "$pwd/tests.xml"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & install-beta/slic3r-gpu-compute-selftest.exe "$pwd/install-beta/resources/vulkan" cpu
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -111,7 +118,7 @@ jobs:
           if (-not (Test-Path install-beta/cudart64_12.dll) -or -not (Test-Path install-beta/vulkan-1.dll)) { throw 'Portable runtime missing' }
           if (@(Get-ChildItem install-beta/resources/vulkan -Filter '*.spv').Count -ne 6) { throw 'Shader packaging incomplete' }
           New-Item -ItemType Directory install-beta/diagnostics,install-beta/licenses -Force | Out-Null
-          $test = @(Get-ChildItem build-gpu -Recurse -Filter libslic3r_tests.exe)
+          $test = @(Get-ChildItem build-gpu -Recurse -Filter gpu_geometry_tests.exe)
           if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
           Copy-Item $test[0].FullName install-beta/diagnostics
           Copy-Item LICENSE install-beta/LICENSE-AGPL-3.0.txt

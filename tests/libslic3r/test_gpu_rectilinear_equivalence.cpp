@@ -46,7 +46,8 @@ struct BackendSettings {
 
 Polylines fill_fixture(const ExPolygon& polygon, float angle)
 {
-    std::unique_ptr<Fill> fill(Fill::new_from_type("rectilinear"));
+    std::unique_ptr<Fill> fill(Fill::new_from_type(ipRectilinear));
+    REQUIRE(fill != nullptr);
     fill->angle = angle;
     fill->layer_id = 0;
     fill->z = 0.2;
