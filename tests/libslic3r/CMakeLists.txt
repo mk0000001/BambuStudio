@@ -59,3 +59,10 @@ endif()
 add_executable(gpu_tree_candidates_tests test_gpu_tree_candidates.cpp)
 set_property(TARGET gpu_tree_candidates_tests PROPERTY CXX_STANDARD 17)
 add_test(NAME gpu_tree_candidates_tests COMMAND gpu_tree_candidates_tests)
+
+# The same production gate suite also runs with the product's native Catch
+# version when GPU support is built; standalone tests/gpu_safety covers OFF.
+if(SLIC3R_ENABLE_CUDA_SLICER OR SLIC3R_ENABLE_VULKAN_SLICER)
+    target_sources(${_TEST_NAME}_tests PRIVATE
+        test_gpu_exact_geometry.cpp test_gpu_batch_preflight.cpp)
+endif()

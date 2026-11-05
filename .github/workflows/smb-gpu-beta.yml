@@ -61,10 +61,12 @@ jobs:
           if ((git rev-parse HEAD:deps).Trim() -ne 'dfcee1c78f98fa9ada89f461a2f4653ec9ad4cca') { throw 'Dependency manifest changed' }
           $archive = @(Get-ChildItem upstream-deps -Recurse -Filter '*.zip')
           if ($archive.Count -ne 1) { throw 'Expected one upstream dependency archive' }
-          Get-FileHash $archive[0].FullName -Algorithm SHA256 | Format-List | Out-File dependency-archive-sha256.txt
+          $digest = (Get-FileHash $archive[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -ne '97d4bd2604f038bd181c5ccb726141a8eb5a71a3c8997552ff1762e8833ea7e2') { throw 'Upstream dependency archive digest mismatch' }
+          $digest | Set-Content dependency-archive-sha256.txt
           New-Item -ItemType Directory deps/build/BambuStudio_dep -Force | Out-Null
           Expand-Archive -LiteralPath $archive[0].FullName -DestinationPath deps/build/BambuStudio_dep
-          if (-not (Test-Path deps/build/BambuStudio_dep/usr/local/include/boost/version.hpp)) { throw 'Dependency layout mismatch' }
+          if (-not (Test-Path deps/build/BambuStudio_dep/usr/local)) { throw 'Dependency prefix layout mismatch' }
       - name: Install build utilities
         run: choco install nsis pkgconfiglite --yes --no-progress
       - name: Install Pascal-capable CUDA
@@ -112,7 +114,7 @@ jobs:
           $test = @(Get-ChildItem build-gpu -Recurse -Filter libslic3r_tests.exe)
           if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
           Copy-Item $test[0].FullName install-beta/diagnostics
-          Copy-Item LICENSE.txt install-beta/LICENSE-AGPL-3.0.txt
+          Copy-Item LICENSE install-beta/LICENSE-AGPL-3.0.txt
           $notices = @(Get-ChildItem "$env:CUDA_PATH" -File | Where-Object Name -Match 'LICENSE|EULA')
           if (-not $notices.Count) { throw 'CUDA notices missing' }
           $notices | Copy-Item -Destination install-beta/licenses
