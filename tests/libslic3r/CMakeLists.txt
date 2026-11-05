@@ -46,3 +46,16 @@ endif()
 
 # catch_discover_tests(${_TEST_NAME}_tests TEST_PREFIX "${_TEST_NAME}: ")
 add_test(${_TEST_NAME}_tests ${_TEST_NAME}_tests ${CATCH_EXTRA_ARGS})
+
+# This production candidate visitor is independent of optional GPU toolchains.
+add_executable(gpu_rectilinear_candidates_tests test_gpu_rectilinear_candidates.cpp)
+set_property(TARGET gpu_rectilinear_candidates_tests PROPERTY CXX_STANDARD 17)
+add_test(NAME gpu_rectilinear_candidates_tests COMMAND gpu_rectilinear_candidates_tests)
+
+if(SLIC3R_ENABLE_CUDA_SLICER OR SLIC3R_ENABLE_VULKAN_SLICER)
+    target_sources(${_TEST_NAME}_tests PRIVATE test_gpu_rectilinear_equivalence.cpp)
+endif()
+
+add_executable(gpu_tree_candidates_tests test_gpu_tree_candidates.cpp)
+set_property(TARGET gpu_tree_candidates_tests PROPERTY CXX_STANDARD 17)
+add_test(NAME gpu_tree_candidates_tests COMMAND gpu_tree_candidates_tests)

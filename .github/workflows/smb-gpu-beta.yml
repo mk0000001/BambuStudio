@@ -1,0 +1,141 @@
+name: Bambu 2.9.1 SMB GPU beta validation
+on:
+  push:
+    branches: [ci/smb-gpu-beta-2.9.1]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+env:
+  SLIC3R_GPU_BACKEND: cpu
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ssrobins/install-cmake@v1
+        with:
+          version: 3.31.6
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y libboost-dev
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.gz' -OutFile boost-source.tar.gz
+          if ((Get-FileHash boost-source.tar.gz -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'a5800f405508f5df8114558ca9855d2640a2de8f0445f051fa1c7c3383045724') { throw 'Boost archive digest mismatch' }
+          tar -xzf boost-source.tar.gz
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "BOOST_ROOT=$pwd/boost_1_84_0" | Add-Content $env:GITHUB_ENV
+      - run: cmake -S tests/gpu_safety -B build-contracts
+      - run: cmake --build build-contracts --config Release --parallel 2
+      - run: ctest --test-dir build-contracts -C Release --output-on-failure
+  windows-app:
+    needs: contracts
+    runs-on: windows-2022
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: ssrobins/install-cmake@v1
+        with:
+          version: 3.31.6
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
+      - name: Reuse exact upstream dependency manifest
+        uses: actions/download-artifact@v6
+        with:
+          artifact-ids: '11538406435'
+          repository: bambulab/BambuStudio
+          run-id: '37744640761'
+          github-token: ${{ github.token }}
+          path: upstream-deps
+      - name: Check provenance and dependency layout
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD:deps).Trim() -ne 'dfcee1c78f98fa9ada89f461a2f4653ec9ad4cca') { throw 'Dependency manifest changed' }
+          $archive = @(Get-ChildItem upstream-deps -Recurse -Filter '*.zip')
+          if ($archive.Count -ne 1) { throw 'Expected one upstream dependency archive' }
+          Get-FileHash $archive[0].FullName -Algorithm SHA256 | Format-List | Out-File dependency-archive-sha256.txt
+          New-Item -ItemType Directory deps/build/BambuStudio_dep -Force | Out-Null
+          Expand-Archive -LiteralPath $archive[0].FullName -DestinationPath deps/build/BambuStudio_dep
+          if (-not (Test-Path deps/build/BambuStudio_dep/usr/local/include/boost/version.hpp)) { throw 'Dependency layout mismatch' }
+      - name: Install build utilities
+        run: choco install nsis pkgconfiglite --yes --no-progress
+      - name: Install Pascal-capable CUDA
+        uses: Jimver/cuda-toolkit@b8bf9c6c28f8a92fbb04dcfcaee872e60c57462d
+        with:
+          cuda: '12.9.1'
+          method: network
+          sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
+          use-github-cache: true
+          use-local-cache: true
+      - name: Install Vulkan compiler
+        run: choco install vulkan-sdk --version=1.4.363 --yes --no-progress
+      - name: Verify official Vulkan runtime
+        shell: pwsh
+        run: |
+          $vk = (Get-ChildItem C:/VulkanSDK -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          "VULKAN_SDK=$vk" | Add-Content $env:GITHUB_ENV
+          Invoke-WebRequest 'https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/vulkan-runtime-components.zip' -OutFile vulkan-runtime-components.zip
+          if ((Get-FileHash vulkan-runtime-components.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'a25a927aa8b9f0371048f1861cf88ac3b9bc9b1fb332c42d897c8ab32695769a') { throw 'Vulkan runtime digest mismatch' }
+          Expand-Archive vulkan-runtime-components.zip vulkan-runtime
+          "VULKAN_RUNTIME_DIR=$pwd/vulkan-runtime/VulkanRT-X64-1.4.363.0-Components" | Add-Content $env:GITHUB_ENV
+      - name: Configure actual CUDA and Vulkan app
+        shell: pwsh
+        run: |
+          $sdk = (Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/Include' -Directory | Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          cmake -S . -B build-gpu -G 'Visual Studio 17 2022' -A x64 -T "cuda=$env:CUDA_PATH" -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 -DSLIC3R_BUILD_TESTS=ON -DSLIC3R_ENABLE_CUDA_SLICER=ON -DSLIC3R_ENABLE_VULKAN_SLICER=ON -DSLIC3R_GPU_SELFTEST=ON -DCMAKE_CUDA_ARCHITECTURES=61 "-DSLIC3R_VULKAN_RUNTIME_DLL=$env:VULKAN_RUNTIME_DIR/x64/vulkan-1.dll" "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" "-DCMAKE_INSTALL_PREFIX=$pwd/install-beta" -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build full app and tests
+        run: cmake --build build-gpu --target install --config Release --parallel 2
+      - name: Run project tests in CPU mode
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd/install-beta;$env:PATH"
+          $env:SLIC3R_GPU_TEST_RESOURCES = "$pwd/install-beta/resources"
+          ctest --test-dir build-gpu -C Release --output-on-failure --parallel 2 --output-junit "$pwd/tests.xml"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & install-beta/slic3r-gpu-compute-selftest.exe "$pwd/install-beta/resources/vulkan" cpu
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package exact-source app and runtime notices
+        shell: pwsh
+        run: |
+          if (-not (Test-Path install-beta/cudart64_12.dll) -or -not (Test-Path install-beta/vulkan-1.dll)) { throw 'Portable runtime missing' }
+          if (@(Get-ChildItem install-beta/resources/vulkan -Filter '*.spv').Count -ne 6) { throw 'Shader packaging incomplete' }
+          New-Item -ItemType Directory install-beta/diagnostics,install-beta/licenses -Force | Out-Null
+          $test = @(Get-ChildItem build-gpu -Recurse -Filter libslic3r_tests.exe)
+          if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
+          Copy-Item $test[0].FullName install-beta/diagnostics
+          Copy-Item LICENSE.txt install-beta/LICENSE-AGPL-3.0.txt
+          $notices = @(Get-ChildItem "$env:CUDA_PATH" -File | Where-Object Name -Match 'LICENSE|EULA')
+          if (-not $notices.Count) { throw 'CUDA notices missing' }
+          $notices | Copy-Item -Destination install-beta/licenses
+          Copy-Item "$env:VULKAN_RUNTIME_DIR/VulkanRT-License.txt" install-beta/licenses
+          git rev-parse HEAD | Set-Content install-beta/SOURCE-COMMIT.txt
+          'Experimental BambuStudio2.9.1 SMB/GPU beta. CPU is the default. Select SLIC3R_GPU_BACKEND=cuda|vulkan|auto before launching. CUDA12.9.1/sm61. CUDA/Vulkan cover validated rectilinear scanline arithmetic; Vulkan alone adds conservative tree broad phase. Hosted CI does not establish GPU hardware correctness or speedup. Local validation and complex wall/support matrix evidence are required before release.' | Set-Content install-beta/BETA-NOTES.txt
+          foreach ($mode in @('cpu','cuda','vulkan','auto')) {
+            $lines = @('@echo off', "set SLIC3R_GPU_BACKEND=$mode", 'start "" "%~dp0bambu-studio.exe" --datadir "%~dp0beta-profile"')
+            $lines | Set-Content "install-beta/Start-$mode.cmd" -Encoding ascii
+          }
+          Compress-Archive install-beta BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip
+          Get-FileHash BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip -Algorithm SHA256 | Format-List | Out-File package-sha256.txt
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: bambu-gpu-beta-evidence
+          path: |
+            tests.xml
+            dependency-archive-sha256.txt
+            package-sha256.txt
+            build-gpu/Testing/Temporary/LastTest.log
+      - uses: actions/upload-artifact@v6
+        with:
+          name: BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61
+          path: BambuStudio-2.9.1-SMB-GPU-beta-Windows-sm61.zip
+          if-no-files-found: error
