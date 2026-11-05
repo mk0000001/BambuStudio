@@ -53,7 +53,7 @@ jobs:
           $vs = (& $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
           if (-not $vs) { throw 'VS2022 C++ tools missing' }
           $devcmd = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
-          $vars = & cmd /d /s /c "`"`"$devcmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set`""
+          $vars = & cmd /d /s /c "call `"$devcmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set"
           if ($LASTEXITCODE) { throw 'VS2022 developer environment failed' }
           foreach ($line in $vars) {
             if ($line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process') }
