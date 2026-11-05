@@ -1,7 +1,7 @@
-name: Bambu 2.9.1 supported v143 SMB GPU beta validation
+name: Bambu 2.9.1 v143 SMB GPU export validation
 on:
   push:
-    branches: [ci/smb-gpu-cpu-beta-2.9.1-20261106]
+    branches: [ci/smb-gpu-export-beta-2.9.1-20261106]
   workflow_dispatch:
 permissions:
   contents: read
