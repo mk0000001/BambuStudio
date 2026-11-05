@@ -8,6 +8,7 @@
 #include "libslic3r/Format/OBJ.hpp"
 #include "libslic3r/Format/STL.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -18,6 +19,34 @@
 #include <boost/nowide/cstdio.hpp>
 #include <boost/filesystem.hpp>
 #include <libslic3r/ModelArrange.hpp>
+
+// FFF_PHASE_DIAGNOSTIC_HELPERS_BEGIN
+// Diagnostic-only, never release/upstream: synchronous stderr writes perturb timing.
+// Emit only fixed phase labels and validation length/emptiness, never config/error text.
+namespace {
+template <std::size_t N>
+void fff_phase_marker(const char (&record)[N]) noexcept
+{
+    static_assert(N <= 160, "FFF diagnostic records must remain bounded");
+    (void)std::fwrite(record, 1, N - 1, stderr);
+    (void)std::fflush(stderr);
+}
+
+void fff_validation_marker(const std::string &message) noexcept
+{
+    char record[160];
+    const int length = std::snprintf(record, sizeof(record),
+        "FFF_CPU_PHASE_V1 phase=init.validate.result empty=%d length=%zu\n",
+        message.empty() ? 1 : 0, message.size());
+    if (length > 0) {
+        const std::size_t count = static_cast<std::size_t>(length) < sizeof(record)
+            ? static_cast<std::size_t>(length) : sizeof(record) - 1;
+        (void)std::fwrite(record, 1, count, stderr);
+    }
+    (void)std::fflush(stderr);
+}
+}
+// FFF_PHASE_DIAGNOSTIC_HELPERS_END
 
 using namespace std;
 
@@ -202,27 +231,44 @@ static bool verbose_gcode()
 
 void init_print(std::vector<TriangleMesh> &&meshes, Slic3r::Print &print, Slic3r::Model &model, const DynamicPrintConfig &config_in, bool comments)
 {
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.config.begin\n");
 	DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
     config.apply(config_in);
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.config.end\n");
 
     if (verbose_gcode())
         config.set_key_value("gcode_comments", new ConfigOptionBool(true));
 
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.mesh.begin\n");
     for (const TriangleMesh &t : meshes) {
 		ModelObject *object = model.add_object();
 		object->name += "object.stl";
 		object->add_volume(std::move(t));
 		object->add_instance();
 	}
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.mesh.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.arrange.begin\n");
     arrange_objects(model, InfiniteBed{}, ArrangeParams{ scaled(min_object_distance(config))});
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.arrange.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.auto_extruder.begin\n");
 	for (ModelObject *mo : model.objects) {
         mo->ensure_on_bed();
 		print.auto_assign_extruders(mo);
     }
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.auto_extruder.end\n");
 
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.apply.begin\n");
 	print.apply(model, config);
-    print.validate();
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.apply.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.validate.begin\n");
+    {
+        const Slic3r::StringObjectException validation = print.validate();
+        fff_validation_marker(validation.string);
+    }
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.validate.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.status.begin\n");
     print.set_status_silent();
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=init.status.end\n");
 }
 
 void init_print(std::initializer_list<TestMesh> test_meshes, Slic3r::Print &print, Slic3r::Model &model, const Slic3r::DynamicPrintConfig &config_in, bool comments)
@@ -431,6 +477,7 @@ TEST_CASE("Legacy arrangement rejects mixed invalid batches before instance tran
 
 TEST_CASE("G-code export accepts relative files and creates nonempty direct parents", "[test_data][gcode_output_path]")
 {
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.begin\n");
     namespace fs = boost::filesystem;
     const fs::path root = fs::temp_directory_path() / fs::unique_path("bambu-gcode-path-%%%%-%%%%");
     REQUIRE(fs::create_directory(root));
@@ -460,13 +507,26 @@ TEST_CASE("G-code export accepts relative files and creates nonempty direct pare
         }
     } cleanup{output, root};
 
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.model.begin\n");
     Slic3r::Model model;
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.model.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.print.begin\n");
     Slic3r::Print print;
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.print.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.init.begin\n");
     Slic3r::Test::init_print({Slic3r::Test::TestMesh::cube_20x20x20}, print, model,
         Slic3r::DynamicPrintConfig::full_print_config(), true);
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.init.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.status.begin\n");
     print.set_status_silent();
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.status.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.process.begin\n");
     print.process();
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.process.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.export.begin\n");
     REQUIRE_NOTHROW(print.export_gcode(output.string(), nullptr, nullptr));
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.export.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.readback.begin\n");
     REQUIRE(fs::is_regular_file(output));
     std::ifstream stream(output.string(), std::ios::binary);
     REQUIRE(stream.is_open());
@@ -474,6 +534,8 @@ TEST_CASE("G-code export accepts relative files and creates nonempty direct pare
     REQUIRE_FALSE(text.empty());
     REQUIRE(text.find("G1") != std::string::npos);
     REQUIRE_FALSE(fs::exists(output.string() + ".tmp"));
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.readback.end\n");
+    fff_phase_marker("FFF_CPU_PHASE_V1 phase=export_test.body.end\n");
 }
 
 SCENARIO("init_print functionality", "[test_data]") {

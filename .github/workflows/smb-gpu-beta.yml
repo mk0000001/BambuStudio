@@ -1,7 +1,7 @@
-name: Bambu 2.9.1 v143 SMB GPU export validation
+name: Bambu FFF phase and symbol diagnostic (unqualified)
 on:
   push:
-    branches: [ci/smb-gpu-export-beta-2.9.1-20261106]
+    branches: [ci/fff-phase-symbol-diagnostic-20261106]
   workflow_dispatch:
 permissions:
   contents: read
@@ -116,7 +116,7 @@ jobs:
           $sdk = (Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/Include' -Directory | Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1).FullName
           New-Item -ItemType Directory build-gpu/.cmake/api/v1/query -Force | Out-Null
           New-Item -ItemType File build-gpu/.cmake/api/v1/query/codemodel-v2 -Force | Out-Null
-          cmake -S . -B build-gpu -G 'Visual Studio 17 2022' -A x64 -T "v143,cuda=$env:CUDA_PATH" -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 -DSLIC3R_BUILD_TESTS=ON -DSLIC3R_ENABLE_CUDA_SLICER=ON -DSLIC3R_ENABLE_VULKAN_SLICER=ON -DSLIC3R_GPU_SELFTEST=ON -DCMAKE_CUDA_ARCHITECTURES=61 "-DSLIC3R_VULKAN_RUNTIME_DLL=$env:VULKAN_RUNTIME_DIR/x64/vulkan-1.dll" "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" "-DCMAKE_INSTALL_PREFIX=$pwd/install-beta" -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk"
+          cmake -S . -B build-gpu -G 'Visual Studio 17 2022' -A x64 -T "v143,cuda=$env:CUDA_PATH" -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0 -DSLIC3R_BUILD_TESTS=ON -DSLIC3R_ENABLE_CUDA_SLICER=ON -DSLIC3R_ENABLE_VULKAN_SLICER=ON -DSLIC3R_GPU_SELFTEST=ON -DCMAKE_CUDA_ARCHITECTURES=61 "-DSLIC3R_VULKAN_RUNTIME_DLL=$env:VULKAN_RUNTIME_DIR/x64/vulkan-1.dll" "-DCMAKE_PREFIX_PATH=$pwd/deps/build/BambuStudio_dep/usr/local" "-DCMAKE_INSTALL_PREFIX=$pwd/install-beta" -DCMAKE_BUILD_TYPE=Release "-DWIN10SDK_PATH=$sdk" "-DCMAKE_PROJECT_INCLUDE=$pwd/.github/fff-diagnostics/TargetedFffSymbols.cmake"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Verify maintained target manifest before compilation
         shell: pwsh
@@ -148,6 +148,36 @@ jobs:
           $actual = @($listing.tests | ForEach-Object name | Sort-Object)
           if (($actual -join ',') -ne ($expected -join ',')) { throw 'Maintained default test manifest changed' }
           $listing | ConvertTo-Json -Depth 30 | Set-Content maintained-test-manifest.json -Encoding utf8
+      - name: Verify targeted Release debug configuration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./.github/fff-diagnostics/CaptureFffExit.ps1
+          $metadata = Get-Content build-gpu/fff-diagnostic-targets-Release.json -Raw | ConvertFrom-Json
+          if (-not $metadata.msvc -or $metadata.compiler -ne 'MSVC' -or -not (Test-DiagnosticMsvcVersion $metadata.compiler_version) -or $metadata.configuration -ne 'Release') { throw 'Wrong actual diagnostic compiler/configuration' }
+          $reply = 'build-gpu/.cmake/api/v1/reply'
+          $index = @(Get-ChildItem $reply -Filter 'index-*.json')
+          if ($index.Count -ne 1) { throw 'Expected one fresh CMake file-API index' }
+          $model = Get-Content (Join-Path $reply (Get-Content $index[0].FullName -Raw | ConvertFrom-Json).reply.'codemodel-v2'.jsonFile) -Raw | ConvertFrom-Json
+          $release = @($model.configurations | Where-Object name -EQ 'Release')
+          if ($release.Count -ne 1) { throw 'Release target graph missing' }
+          foreach ($name in @('libslic3r','support_material_on_wipe_tower_tests','periodic_modifier_tests')) {
+            $entry = @($release[0].targets | Where-Object name -EQ $name)
+            if ($entry.Count -ne 1) { throw "Actual debug target missing: $name" }
+            $target = Get-Content (Join-Path $reply $entry[0].jsonFile) -Raw | ConvertFrom-Json
+            $groups = @($target.compileGroups | Where-Object language -EQ 'CXX')
+            if (-not $groups.Count) { throw "Actual CXX groups missing: $name" }
+            foreach ($group in $groups) {
+              $flags = @($group.compileCommandFragments | ForEach-Object fragment) -join ' '
+              foreach ($required in @('/O2','/Zi','/FS')) { if (-not $flags.Contains($required)) { throw "Required actual compile option missing: $name $required" } }
+              if ($flags -match '(^|\s)/Od(\s|$)') { throw "Release optimization changed: $name" }
+            }
+            if ($name -ne 'libslic3r') {
+              $flags = @($target.link.commandFragments | ForEach-Object fragment) -join ' '
+              foreach ($required in @('/DEBUG:FULL','/MAP:','/OPT:REF','/OPT:ICF','/PDBPAGESIZE:8192')) { if (-not $flags.Contains($required)) { throw "Required actual link option missing: $name $required" } }
+            }
+          }
+          Copy-Item build-gpu/fff-diagnostic-targets-Release.json fff-diagnostic-configuration.json
       - name: Build full app selftest and runtime-copy target then install
         shell: pwsh
         run: |
@@ -204,6 +234,18 @@ jobs:
           $test = @(Get-ChildItem build-gpu -Recurse -Filter gpu_geometry_tests.exe)
           if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
           Copy-Item $test[0].FullName install-beta/diagnostics
+      - name: Retain actual FFF binaries and symbols before any native test
+        shell: pwsh
+        run: ./.github/fff-diagnostics/RetainFffDiagnostics.ps1
+      - name: Preserve unqualified FFF diagnostic archive before CTest
+        uses: actions/upload-artifact@v6
+        with:
+          name: UNQUALIFIED-Bambu-FFF-diagnostic-symbols
+          path: |
+            UNQUALIFIED-Bambu-FFF-diagnostic-symbols.zip
+            fff-diagnostic-sha256.txt
+            fff-diagnostic-identity.json
+          if-no-files-found: error
       - name: Run focused exact preflight and Fill contracts in CPU mode
         shell: pwsh
         run: |
@@ -231,6 +273,27 @@ jobs:
             if ([int]$suite.GetAttribute('failures') -ne 0 -or [int]$suite.GetAttribute('errors') -ne 0) { throw 'Focused capacity context assertions failed' }
           }
           if ($assertions -ne 15) { throw 'Expected fifteen actual capacity context assertions' }
+      - name: Run focused native enum and capacity fallback cases
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd/install-beta;$env:PATH"
+          $test = @(Get-ChildItem build-gpu/tests/filament_group -Recurse -File -Filter filament_group_tests.exe)
+          if ($test.Count -ne 1) { throw 'Expected one actual maintained filament test executable' }
+          & $test[0].FullName '[enum_capacity_fallback],[capacity_fallback]' -r junit -o "$pwd/focused-filament-enum-capacity.xml" *> focused-filament-enum-capacity.log
+          $result = $LASTEXITCODE
+          Get-Content focused-filament-enum-capacity.log -Tail 60
+          if ($result) { exit $result }
+          [xml]$report = Get-Content focused-filament-enum-capacity.xml -Raw
+          if (@($report.SelectNodes('//testcase')).Count -ne 11) { throw 'Expected exactly eleven registered enum/capacity fallback cases' }
+          $assertions = 0
+          foreach ($suite in @($report.SelectNodes('//testsuite'))) {
+            $assertions += [int]$suite.GetAttribute('tests')
+            if ([int]$suite.GetAttribute('failures') -ne 0 -or [int]$suite.GetAttribute('errors') -ne 0) { throw 'Focused enum/capacity fallback assertions failed' }
+          }
+          if ($assertions -ne 84) { throw 'Expected eighty-four actual enum/capacity fallback assertions' }
+      - name: Collect CPU-only FFF phase output and exact native exit codes
+        shell: pwsh
+        run: ./.github/fff-diagnostics/CaptureFffExit.ps1
       - name: Run project tests in CPU mode
         shell: pwsh
         run: |
@@ -258,7 +321,13 @@ jobs:
             focused-gpu-tests.xml
             focused-filament-context.xml
             focused-filament-context.log
+            focused-filament-enum-capacity.xml
+            focused-filament-enum-capacity.log
             maintained-test-manifest.json
+            fff-diagnostic-configuration.json
+            fff-diagnostic-identity.json
+            fff-diagnostic-sha256.txt
+            fff-native-phase-evidence
             app-build.log
             app-install.log
             maintained-build.log
