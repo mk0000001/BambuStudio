@@ -200,10 +200,15 @@ TEST_CASE("used mixed filament components generate a wipe tower", "[SupportMater
     Model model;
     init_support_on_wipe_tower_print(print, model, config, 1, [](Model &m) {
         m.objects.front()->config.set_key_value("extruder", new ConfigOptionInt(3));
+        // Default feature slots follow the part's mixed filament, not global slot1.
+        m.objects.front()->config.set_key_value("wall_filament", new ConfigOptionInt(0));
+        m.objects.front()->config.set_key_value("sparse_infill_filament", new ConfigOptionInt(0));
+        m.objects.front()->config.set_key_value("solid_infill_filament", new ConfigOptionInt(0));
         m.objects.front()->config.set_key_value("enable_support", new ConfigOptionBool(false));
     });
 
     REQUIRE(print.extruders().size() == 1);
+    REQUIRE(print.extruders().front() == 2);
     REQUIRE(print.has_wipe_tower());
 
     print.process();
