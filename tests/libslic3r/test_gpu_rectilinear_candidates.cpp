@@ -1,3 +1,5 @@
+#include <utility>
+#include <exception>
 #include "../../src/libslic3r/Gpu/VerticalIntersectionCandidates.hpp"
 #include <algorithm>
 #include <cstddef>

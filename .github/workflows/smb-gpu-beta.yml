@@ -1,7 +1,7 @@
 name: Bambu 2.9.1 SMB GPU beta validation
 on:
   push:
-    branches: [ci/smb-gpu-beta-2.9.1]
+    branches: [ci/smb-gpu-beta-2.9.1-final]
   workflow_dispatch:
 permissions:
   contents: read
