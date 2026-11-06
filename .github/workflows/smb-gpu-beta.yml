@@ -1,7 +1,7 @@
 name: Bambu include-cache and nullable-result validation (unqualified)
 on:
   push:
-    branches: [ci/smb-gpu-cache-result-beta-2.9.1-20261106]
+    branches: [ci/smb-gpu-cache-result-beta-2.9.1-20261106, ci/startup-control-bambu-a5-20261106]
   workflow_dispatch:
 permissions:
   contents: read
