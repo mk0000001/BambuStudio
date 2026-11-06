@@ -1,7 +1,7 @@
-name: Bambu CUDA reuse and CPU enum-map validation (unqualified)
+name: Bambu include-cache and nullable-result validation (unqualified)
 on:
   push:
-    branches: [ci/smb-gpu-cuda-enum-beta-2.9.1-20261106]
+    branches: [ci/smb-gpu-cache-result-beta-2.9.1-20261106]
   workflow_dispatch:
 permissions:
   contents: read
@@ -250,6 +250,29 @@ jobs:
           $test = @(Get-ChildItem build-gpu -Recurse -Filter gpu_geometry_tests.exe)
           if ($test.Count -ne 1) { throw 'Expected one full geometry test executable' }
           Copy-Item $test[0].FullName install-beta/diagnostics
+      - name: Package complete compiled pretest candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($required in @('bambu-studio.exe','BambuStudio.dll','slic3r-gpu-compute-selftest.exe','diagnostics/gpu_geometry_tests.exe','cudart64_12.dll','vulkan-1.dll','SOURCE-COMMIT.txt','SOURCE-URL.txt','LICENSE-AGPL-3.0.txt')) {
+            if (-not (Test-Path -LiteralPath "install-beta/$required" -PathType Leaf)) { throw "Compiled pretest candidate missing: $required" }
+          }
+          if ((Get-Content install-beta/SOURCE-COMMIT.txt -Raw).Trim() -ne (git rev-parse HEAD).Trim()) { throw 'Compiled pretest source identity differs' }
+          if (@(git status --porcelain --untracked-files=no).Count) { throw 'Tracked source changed before compiled pretest package' }
+          if (@(Get-ChildItem install-beta/resources/vulkan -File -Filter '*.spv').Count -ne 6) { throw 'Compiled pretest shaders incomplete' }
+          if (-not @(Get-ChildItem install-beta/licenses -File).Count) { throw 'Compiled pretest notices missing' }
+          'UNQUALIFIED_COMPLETE_PRETEST_CANDIDATE; app and maintained test executables compiled; test/hardware/model/GUI/performance validation pending; not a qualified release.' | Set-Content install-beta/VALIDATION-STATUS.txt -Encoding ascii
+          Compress-Archive install-beta UNQUALIFIED-BambuStudio-2.9.1-SMB-GPU-v143-complete-pretest.zip
+          $hash = (Get-FileHash UNQUALIFIED-BambuStudio-2.9.1-SMB-GPU-v143-complete-pretest.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  UNQUALIFIED-BambuStudio-2.9.1-SMB-GPU-v143-complete-pretest.zip" | Set-Content complete-pretest-sha256.txt -Encoding ascii
+      - name: Preserve complete compiled pretest candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: UNQUALIFIED-BambuStudio-2.9.1-SMB-GPU-v143-complete-pretest
+          path: |
+            UNQUALIFIED-BambuStudio-2.9.1-SMB-GPU-v143-complete-pretest.zip
+            complete-pretest-sha256.txt
+          if-no-files-found: error
       - name: Retain actual FFF binaries and symbols before any native test
         shell: pwsh
         run: ./.github/fff-diagnostics/RetainFffDiagnostics.ps1
@@ -310,6 +333,19 @@ jobs:
           if ($result) { exit $result }
           python .github/gpu-validation/check_focused_catch.py --xml focused-config-enum-map.xml --repo . --kind enum-map > focused-config-enum-map-summary.json
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Run focused preset include-diff cache regression
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd/install-beta;$env:PATH"
+          $env:SLIC3R_GPU_TEST_RESOURCES = "$pwd/install-beta/resources"
+          $test = @(Get-ChildItem build-gpu -Recurse -File -Filter bambu_enum_map_tests.exe)
+          if ($test.Count -ne 1) { throw 'Expected one actual maintained focused test executable' }
+          & $test[0].FullName '[PresetIncludeDiffCache]' -r xml -o "$pwd/focused-preset-include-diff.xml" *> focused-preset-include-diff.log
+          $result = $LASTEXITCODE
+          Get-Content focused-preset-include-diff.log -Tail 60
+          if ($result) { exit $result }
+          python .github/gpu-validation/check_focused_catch.py --xml focused-preset-include-diff.xml --repo . --kind preset-include-diff > focused-preset-include-diff-summary.json
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Run focused CUDA dispatch buffer ownership regression
         shell: pwsh
         run: |
@@ -360,6 +396,10 @@ jobs:
             focused-config-enum-map.xml
             focused-config-enum-map.log
             focused-config-enum-map-summary.json
+            focused-preset-include-diff.xml
+            focused-preset-include-diff.log
+            focused-preset-include-diff-summary.json
+            complete-pretest-sha256.txt
             focused-cuda-buffer.xml
             focused-cuda-buffer.log
             focused-cuda-buffer-summary.json

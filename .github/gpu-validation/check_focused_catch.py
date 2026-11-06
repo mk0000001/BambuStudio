@@ -5,7 +5,8 @@ SPECS={
  'context':(15,4,{'capacity_fallback'},['tests/filament_group/test_filament_group_context.cpp']),
  'capacity':(84,11,{'capacity_fallback','enum_capacity_fallback'},['tests/filament_group/test_filament_group_context.cpp','tests/filament_group/test_filament_enum_capacity.cpp']),
  'enum-map':(263,4,{'EnumMaps'},['tests/libslic3r/test_config_enum_maps.cpp']),
- 'cuda-buffer':(145,17,{'CudaDispatchBuffers'},['tests/libslic3r/test_cuda_dispatch_buffers.cpp'])}
+ 'cuda-buffer':(145,17,{'CudaDispatchBuffers'},['tests/libslic3r/test_cuda_dispatch_buffers.cpp']),
+ 'preset-include-diff':(32,8,{'PresetIncludeDiffCache'},['tests/libslic3r/test_preset_include_diff_cache.cpp'])}
 def case_names(repo,kind):
  assertions,count,tags,paths=SPECS[kind];names=[]
  for path in paths:

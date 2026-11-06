@@ -1,4 +1,4 @@
-# Fork CI only: compile the reviewed four-case fixture with actual app providers.
+# Fork CI only: compile reviewed enum-map and include-cache fixtures with actual app providers.
 # The obsolete suite remains excluded; the existing all-ten CTest set is unchanged.
 include_guard(GLOBAL)
 function(bambu_add_focused_enum_map)
@@ -9,7 +9,8 @@ function(bambu_add_focused_enum_map)
     endforeach()
     add_executable(bambu_enum_map_tests
         "${PROJECT_SOURCE_DIR}/tests/libslic3r/test_gpu_geometry_main.cpp"
-        "${PROJECT_SOURCE_DIR}/tests/libslic3r/test_config_enum_maps.cpp")
+        "${PROJECT_SOURCE_DIR}/tests/libslic3r/test_config_enum_maps.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/libslic3r/test_preset_include_diff_cache.cpp")
     target_compile_features(bambu_enum_map_tests PRIVATE cxx_std_17)
     target_include_directories(bambu_enum_map_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
     target_link_libraries(bambu_enum_map_tests PRIVATE test_common libslic3r)
